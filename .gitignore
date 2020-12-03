@@ -1,5 +1,3 @@
 .idea/
 node_modules/
-day00/input
-day01/input
-day02/input
+day*/input
