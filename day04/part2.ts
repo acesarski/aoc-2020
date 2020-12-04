@@ -3,19 +3,26 @@ import * as util from 'util';
 
 const fileReader = util.promisify(fs.readFile);
 
-const requiredFields = ['byr', 'ecl', 'pid', 'eyr', 'iyr', 'hcl', 'hgt']
-
 interface Validator {
-    isValid: (value) => boolean
+    canValidate: (document) => boolean
+    validate: (document) => boolean
 }
 
 class BirthYearValidator implements Validator{
-    public isValid(value): boolean {
-        if (value.length !== 4) {
+    public canValidate(document): boolean {
+        return document.hasOwnProperty('byr');
+    }
+
+    public validate(document): boolean {
+        if (!this.canValidate(document)) {
             return false
         }
 
-        const parsedValue = parseInt(value)
+        if (document['byr'].length !== 4) {
+            return false
+        }
+
+        const parsedValue = parseInt(document['byr'])
         if (isNaN(parsedValue)) {
             return false
         }
@@ -25,12 +32,20 @@ class BirthYearValidator implements Validator{
 }
 
 class IssueYearValidator implements Validator{
-    public isValid(value): boolean {
-        if (value.length !== 4) {
+    public canValidate(document): boolean {
+        return document.hasOwnProperty('iyr');
+    }
+
+    public validate(document): boolean {
+        if (!this.canValidate(document)) {
             return false
         }
 
-        const parsedValue = parseInt(value)
+        if (document['iyr'].length !== 4) {
+            return false
+        }
+
+        const parsedValue = parseInt(document['iyr'])
         if (isNaN(parsedValue)) {
             return false
         }
@@ -40,12 +55,20 @@ class IssueYearValidator implements Validator{
 }
 
 class ExpirationYearValidator implements Validator{
-    public isValid(value): boolean {
-        if (value.length !== 4) {
+    public canValidate(document): boolean {
+        return document.hasOwnProperty('eyr');
+    }
+
+    public validate(document): boolean {
+        if (!this.canValidate(document)) {
             return false
         }
 
-        const parsedValue = parseInt(value)
+        if (document['eyr'].length !== 4) {
+            return false
+        }
+
+        const parsedValue = parseInt(document['eyr'])
         if (isNaN(parsedValue)) {
             return false
         }
@@ -55,36 +78,68 @@ class ExpirationYearValidator implements Validator{
 }
 
 class PassportIdValidator implements Validator{
-    public isValid(value): boolean {
-        if (value.length !== 9) {
+    public canValidate(document): boolean {
+        return document.hasOwnProperty('pid');
+    }
+
+    public validate(document): boolean {
+        if (!this.canValidate(document)) {
             return false
         }
 
-        const parsedValue = parseInt(value)
+        if (document['pid'].length !== 9) {
+            return false
+        }
+
+        const parsedValue = parseInt(document['pid'])
         return !isNaN(parsedValue);
     }
 }
 
 class EyeColorValidator implements Validator{
-    public isValid(value): boolean {
-        return ['amb', 'blu', 'brn', 'gry', 'grn', 'hzl', 'oth'].includes(value);
+    public canValidate(document): boolean {
+        return document.hasOwnProperty('ecl');
+    }
+
+    public validate(document): boolean {
+        if (!this.canValidate(document)) {
+            return false
+        }
+
+        return ['amb', 'blu', 'brn', 'gry', 'grn', 'hzl', 'oth'].includes(document['ecl']);
     }
 }
 
 class HairColorValidator implements Validator{
-    public isValid(value): boolean {
-        return /^#[0-9A-F]{6}$/i.test(value);
+    public canValidate(document): boolean {
+        return document.hasOwnProperty('hcl');
+    }
+
+    public validate(document): boolean {
+        if (!this.canValidate(document)) {
+            return false
+        }
+
+        return /^#[0-9A-F]{6}$/i.test(document['hcl']);
     }
 }
 
 class HeightValidator implements Validator{
-    public isValid(value): boolean {
-        if (value.endsWith('in')) {
-            return this.validateImperial(value.replace('in', ''))
+    public canValidate(document): boolean {
+        return document.hasOwnProperty('hgt');
+    }
+
+    public validate(document): boolean {
+        if (!this.canValidate(document)) {
+            return false
         }
 
-        if (value.endsWith('cm')) {
-            return this.validateMetric(value.replace('cm', ''))
+        if (document['hgt'].endsWith('in')) {
+            return this.validateImperial(document['hgt'].replace('in', ''))
+        }
+
+        if (document['hgt'].endsWith('cm')) {
+            return this.validateMetric(document['hgt'].replace('cm', ''))
         }
 
         return false
@@ -109,6 +164,26 @@ class HeightValidator implements Validator{
     }
 }
 
+class ChainDocumentValidator implements Validator {
+    public constructor(
+       private validators: Validator[]
+    ) {}
+
+    public canValidate(document) {
+        return this.validators
+            .every((validator) => validator.canValidate(document))
+    }
+
+    public validate(document) {
+        if (!this.canValidate(document)) {
+            return false;
+        }
+
+        return this.validators
+            .every((validator) => validator.validate(document))
+    }
+}
+
 const solution = async () => {
     const input = await fileReader('day04/input', 'utf-8');
 
@@ -118,53 +193,17 @@ const solution = async () => {
         .map((document) => document.map((value) => value.split(':')))
         .map((document) => document.reduce((prev, [key, value]) => ({ ...prev, [key]: value }), {}))
         .filter((document) => {
-            const documentFields = Object.keys(document);
+            const chainDocumentValidator = new ChainDocumentValidator([
+                new BirthYearValidator(),
+                new IssueYearValidator(),
+                new ExpirationYearValidator(),
+                new HeightValidator(),
+                new HairColorValidator(),
+                new EyeColorValidator(),
+                new PassportIdValidator(),
+            ])
 
-            let isValid = true;
-            requiredFields.forEach((field) => {
-                if (!documentFields.includes(field)) {
-                    isValid = false
-                }
-            })
-
-            return isValid
-        }).filter((document) => {
-            const birthYearValidator = new BirthYearValidator()
-            if (!birthYearValidator.isValid(document['byr'])) {
-                return false
-            }
-
-            const issueYearValidator = new IssueYearValidator()
-            if (!issueYearValidator.isValid(document['iyr'])) {
-                return false
-            }
-
-            const expirationYearValidator = new ExpirationYearValidator()
-            if (!expirationYearValidator.isValid(document['eyr'])) {
-                return false
-            }
-
-            const heightValidator = new HeightValidator()
-            if (!heightValidator.isValid(document['hgt'])) {
-                return false
-            }
-
-            const hairColorValidator = new HairColorValidator()
-            if (!hairColorValidator.isValid(document['hcl'])) {
-                return false
-            }
-
-            const eyeColorValidator = new EyeColorValidator()
-            if (!eyeColorValidator.isValid(document['ecl'])) {
-                return false
-            }
-
-            const passportIdValidator = new PassportIdValidator()
-            if (!passportIdValidator.isValid(document['pid'])) {
-                return false
-            }
-
-            return true
+            return chainDocumentValidator.validate(document)
         })
 
     return documents.length
